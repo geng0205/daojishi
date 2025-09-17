@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>时间数据统计</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdn.jsdelivr.net/npm/font-awesome@4.7.0/css/font-awesome.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#3b82f6',
+                        secondary: '#64748b',
+                        accent: '#10b981',
+                        light: '#f1f5f9',
+                        dark: '#1e293b'
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'system-ui', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .card-shadow {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            }
+            .animate-number {
+                transition: all 0.8s ease-out;
+            }
+        }
+    </style>
+</head>
+<body class="bg-light text-dark font-sans p-0 m-0">
+    <div class="container w-full max-w-md mx-auto p-4 space-y-4">
+        <!-- 当月已过去百分比 -->
+        <div class="bg-white rounded-lg p-4 card-shadow">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-secondary text-sm flex items-center">
+                    <i class="fa fa-calendar-o mr-2"></i>当月进度
+                </span>
+                <span id="monthPercent" class="text-primary text-xl font-bold animate-number">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div id="monthBar" class="bg-primary h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- 当年已过去百分比 -->
+        <div class="bg-white rounded-lg p-4 card-shadow">
+            <div class="flex justify-between items-center mb-2">
+                <span class="text-secondary text-sm flex items-center">
+                    <i class="fa fa-calendar mr-2"></i>当年进度
+                </span>
+                <span id="yearPercent" class="text-primary text-xl font-bold animate-number">0%</span>
+            </div>
+            <div class="w-full bg-gray-200 rounded-full h-2">
+                <div id="yearBar" class="bg-primary h-2 rounded-full transition-all duration-1000" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- 距离本周末还有几天 -->
+        <div class="bg-white rounded-lg p-4 card-shadow">
+            <div class="flex justify-between items-center">
+                <span class="text-secondary text-sm flex items-center">
+                    <i class="fa fa-coffee mr-2"></i>距离周末
+                </span>
+                <span id="daysToWeekend" class="text-accent text-xl font-bold animate-number">0天</span>
+            </div>
+        </div>
+
+        <!-- 距离下一个法定节假日还有几天 -->
+        <div class="bg-white rounded-lg p-4 card-shadow">
+            <div class="flex justify-between items-center">
+                <span class="text-secondary text-sm flex items-center">
+                    <i class="fa fa-star-o mr-2"></i>下个节假日
+                </span>
+                <div class="text-right">
+                    <div id="nextHolidayName" class="text-xs text-gray-500"></div>
+                    <div id="daysToHoliday" class="text-accent text-xl font-bold animate-number">0天</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 距离下班的剩余小时数 -->
+        <div class="bg-white rounded-lg p-4 card-shadow">
+            <div class="flex justify-between items-center">
+                <span class="text-secondary text-sm flex items-center">
+                    <i class="fa fa-clock-o mr-2"></i>距离下班
+                </span>
+                <span id="hoursToLeave" class="text-accent text-xl font-bold animate-number">0小时</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 中国法定节假日 - 更新为2025年数据
+        const holidays = [
+            { name: "国庆节", date: "2025-10-01" },
+            { name: "元旦", date: "2026-01-01" },
+            { name: "春节", date: "2026-01-29" },
+            { name: "清明节", date: "2026-04-05" },
+            { name: "劳动节", date: "2026-05-01" },
+            { name: "端午节", date: "2026-06-20" },
+            { name: "中秋节", date: "2026-09-27" }
+        ];
+
+        // 获取当前日期
+        function getCurrentDate() {
+            return new Date();
+        }
+
+        // 计算当月已过去的百分比
+        function calculateMonthPercent(date) {
+            const year = date.getFullYear();
+            const month = date.getMonth();
+            const day = date.getDate();
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            
+            // 当月总天数
+            const totalDays = new Date(year, month + 1, 0).getDate();
+            
+            // 计算已过去的时间占比（包括当天的时间）
+            const dayPercent = (day - 1) / totalDays;
+            const hourPercent = (hours * 60 + minutes) / (24 * 60 * totalDays);
+            const totalPercent = Math.min(Math.round((dayPercent + hourPercent) * 100), 100);
+            
+            return totalPercent;
+        }
+
+        // 计算当年已过去的百分比
+        function calculateYearPercent(date) {
+            const year = date.getFullYear();
+            const startOfYear = new Date(year, 0, 1);
+            const endOfYear = new Date(year, 11, 31, 23, 59, 59);
+            
+            const elapsed = date - startOfYear;
+            const total = endOfYear - startOfYear;
+            const percent = Math.min(Math.round((elapsed / total) * 100), 100);
+            
+            return percent;
+        }
+
+        // 计算距离本周末还有几天
+        function calculateDaysToWeekend(date) {
+            const day = date.getDay(); // 0是周日，6是周六
+            return day === 0 ? 6 : (6 - day);
+        }
+
+        // 计算距离下一个法定节假日还有几天
+        function calculateNextHoliday(date) {
+            const currentYear = date.getFullYear();
+            const currentTime = date.getTime();
+            
+            // 筛选出当前及未来的节假日
+            const validHolidays = holidays
+                .map(holiday => ({
+                    ...holiday,
+                    time: new Date(holiday.date).getTime()
+                }))
+                .filter(holiday => holiday.time >= currentTime)
+                .sort((a, b) => a.time - b.time);
+            
+            if (validHolidays.length === 0) {
+                return { name: "元旦", days: calculateDaysBetween(date, new Date(`${currentYear + 1}-01-01`)) };
+            }
+            
+            const nextHoliday = validHolidays[0];
+            return {
+                name: nextHoliday.name,
+                days: calculateDaysBetween(date, new Date(nextHoliday.date))
+            };
+        }
+
+        // 计算两个日期之间的天数
+        function calculateDaysBetween(date1, date2) {
+            const oneDay = 24 * 60 * 60 * 1000; // 毫秒
+            const diffTime = date2 - date1;
+            return Math.ceil(diffTime / oneDay);
+        }
+
+        // 计算距离下班的剩余小时数（8:30上班，17:30下班）
+        function calculateHoursToLeave(date) {
+            const hours = date.getHours();
+            const minutes = date.getMinutes();
+            
+            // 下班时间是17:30
+            const leaveHour = 17;
+            const leaveMinute = 30;
+            
+            // 如果已经过了下班时间
+            if (hours > leaveHour || (hours === leaveHour && minutes >= leaveMinute)) {
+                return 0;
+            }
+            
+            // 计算剩余小时数
+            let hoursLeft = leaveHour - hours;
+            let minutesLeft = leaveMinute - minutes;
+            
+            if (minutesLeft < 0) {
+                hoursLeft--;
+                minutesLeft += 60;
+            }
+            
+            // 转换为小时并保留一位小数
+            return parseFloat((hoursLeft + minutesLeft / 60).toFixed(1));
+        }
+
+        // 数字动画效果
+        function animateValue(id, start, end, duration = 1000, suffix = '') {
+            const obj = document.getElementById(id);
+            if (!obj) return;
+            
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                
+                // 针对不同数据类型使用不同的计算方式
+                let value;
+                if (id.includes('Percent')) {
+                    value = Math.floor(progress * (end - start) + start);
+                } else if (id === 'hoursToLeave') {
+                    value = parseFloat((progress * (end - start) + start).toFixed(1));
+                } else {
+                    value = Math.round(progress * (end - start) + start);
+                }
+                
+                obj.innerHTML = value + suffix;
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+
+        // 更新所有数据
+        function updateAllData() {
+            const now = getCurrentDate();
+            
+            // 更新当月进度
+            const monthPercent = calculateMonthPercent(now);
+            animateValue('monthPercent', 0, monthPercent, 1500, '%');
+            document.getElementById('monthBar').style.width = monthPercent + '%';
+            
+            // 更新当年进度
+            const yearPercent = calculateYearPercent(now);
+            animateValue('yearPercent', 0, yearPercent, 1500, '%');
+            document.getElementById('yearBar').style.width = yearPercent + '%';
+            
+            // 更新距离周末
+            const daysToWeekend = calculateDaysToWeekend(now);
+            animateValue('daysToWeekend', 0, daysToWeekend, 1500, '天');
+            
+            // 更新下一个节假日
+            const nextHoliday = calculateNextHoliday(now);
+            document.getElementById('nextHolidayName').textContent = nextHoliday.name;
+            animateValue('daysToHoliday', 0, nextHoliday.days, 1500, '天');
+            
+            // 更新距离下班时间
+            const hoursToLeave = calculateHoursToLeave(now);
+            animateValue('hoursToLeave', 0, hoursToLeave, 1500, '小时');
+        }
+
+        // 初始加载时更新数据
+        updateAllData();
+
+        // 每5分钟更新一次数据
+        setInterval(updateAllData, 5 * 60 * 1000);
+    </script>
+</body>
+</html>
